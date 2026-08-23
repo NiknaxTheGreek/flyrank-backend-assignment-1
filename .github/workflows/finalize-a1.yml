@@ -3,7 +3,7 @@ name: Finalize Assignment 1 evidence
 on:
   push:
     paths:
-      - '.github/workflows/finalize-a1.yml'
+      - ".github/workflows/finalize-a1.yml"
   workflow_dispatch:
 
 permissions:
@@ -20,163 +20,243 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install playwright
-          python -m playwright install chromium
+          python -m playwright install --with-deps chromium
 
       - name: Run automated tests
-        run: python -m pytest -q
+        run: |
+          PYTHONPATH=. python -m pytest -q
 
       - name: Start API
         run: |
-          uvicorn main:app --host 127.0.0.1 --port 8000 > /tmp/a1-api.log 2>&1 &
+          python -m uvicorn main:app \
+            --host 127.0.0.1 \
+            --port 8000 \
+            > /tmp/a1-api.log 2>&1 &
+
           echo $! > /tmp/a1-api.pid
+
           for i in {1..30}; do
             if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
+              echo "API is ready"
               exit 0
             fi
             sleep 1
           done
+
+          echo "API failed to start"
           cat /tmp/a1-api.log
           exit 1
 
-      - name: Exercise full CRUD through Swagger UI and capture screenshot
+      - name: Exercise full CRUD through Swagger UI
         run: |
           mkdir -p docs
+
           python - <<'PY'
           import json
+          import re
           import urllib.request
           from datetime import datetime, timezone
+
           from playwright.sync_api import sync_playwright, expect
 
           BASE = "http://127.0.0.1:8000"
+
 
           def api_json(path):
               with urllib.request.urlopen(BASE + path) as response:
                   return json.load(response)
 
-          def operation(page, method, path):
-              xpath = (
-                  f'//div[contains(concat(" ", normalize-space(@class), " "), " opblock-{method.lower()} ")]'
-                  f'[.//span[contains(@class,"opblock-summary-path") and normalize-space(text())="{path}"]]'
+
+          def open_operation(page, method, path):
+              pattern = re.compile(
+                  rf"^{method.upper()}\s+{re.escape(path)}(?:\s|$)"
               )
-              block = page.locator(f"xpath={xpath}").first
-              expect(block).to_be_visible()
 
-              block.locator(".opblock-summary").click()
+              summary = page.get_by_role(
+                  "button",
+                  name=pattern
+              ).first
 
-              try_button = block.get_by_role("button", name="Try it out")
-              if try_button.count():
+              expect(summary).to_be_visible(timeout=15000)
+
+              block = summary.locator(
+                  "xpath=ancestor::div[contains(@class,'opblock')]"
+              ).first
+
+              summary.click()
+
+              try_button = block.get_by_role(
+                  "button",
+                  name="Try it out",
+                  exact=True
+              )
+
+              if try_button.count() and try_button.is_visible():
                   try_button.click()
 
               return block
 
-          def run_request(block, expected_status):
-              block.get_by_role("button", name="Execute").click()
-              live_status = block.locator(
+
+          def execute(block, expected_status):
+              execute_button = block.get_by_role(
+                  "button",
+                  name="Execute",
+                  exact=True
+              )
+
+              expect(execute_button).to_be_visible(timeout=10000)
+              execute_button.click()
+
+              status = block.locator(
                   ".live-responses-table .response-col_status"
               ).first
-              expect(live_status).to_have_text(
+
+              expect(status).to_contain_text(
                   str(expected_status),
                   timeout=15000
               )
+
               return expected_status
 
-          rows = []
-          unique_title = "Swagger verification task"
 
-          with sync_playwright() as p:
-              browser = p.chromium.launch(headless=True)
+          rows = []
+
+          with sync_playwright() as playwright:
+              browser = playwright.chromium.launch(
+                  headless=True
+              )
 
               page = browser.new_page(
-                  viewport={"width": 1440, "height": 1800}
+                  viewport={
+                      "width": 1440,
+                      "height": 1800
+                  }
               )
 
               page.goto(
                   BASE + "/docs",
-                  wait_until="networkidle"
+                  wait_until="networkidle",
+                  timeout=30000
               )
 
-              expect(
-                  page.get_by_text("Task API", exact=True).first
-              ).to_be_visible()
+              # Swagger heading is actually:
+              # "Task API 1.0 OAS 3.1"
+              heading = page.locator("h1").first
+              expect(heading).to_contain_text(
+                  "Task API",
+                  timeout=15000
+              )
 
+              # -------------------------
               # GET /tasks
-              block = operation(
+              # -------------------------
+              list_block = open_operation(
                   page,
-                  "get",
+                  "GET",
                   "/tasks"
               )
+
               rows.append(
-                  ("GET", "/tasks", run_request(block, 200))
+                  (
+                      "GET",
+                      "/tasks",
+                      execute(list_block, 200)
+                  )
               )
 
+              # -------------------------
               # POST /tasks
-              block = operation(
+              # -------------------------
+              create_block = open_operation(
                   page,
-                  "post",
+                  "POST",
                   "/tasks"
               )
 
-              block.locator("textarea").fill(
+              create_block.locator(
+                  "textarea"
+              ).fill(
                   json.dumps({
-                      "title": unique_title
+                      "title": "Swagger verification task"
                   })
               )
 
               rows.append(
-                  ("POST", "/tasks", run_request(block, 201))
+                  (
+                      "POST",
+                      "/tasks",
+                      execute(create_block, 201)
+                  )
               )
 
               created = [
                   task
                   for task in api_json("/tasks")
-                  if task["title"] == unique_title
+                  if task["title"]
+                  == "Swagger verification task"
               ]
 
               if len(created) != 1:
                   raise RuntimeError(
-                      f"Expected one created Swagger task, got {created!r}"
+                      "Swagger POST did not create exactly "
+                      "one verification task"
                   )
 
               task_id = created[0]["id"]
 
+              if created[0]["done"] is not False:
+                  raise RuntimeError(
+                      "Created task did not default to done=false"
+                  )
+
+              # -------------------------
               # GET /tasks/{task_id}
-              block = operation(
+              # -------------------------
+              get_block = open_operation(
                   page,
-                  "get",
+                  "GET",
                   "/tasks/{task_id}"
               )
 
-              block.locator(
+              get_block.locator(
                   ".parameters input"
-              ).first.fill(str(task_id))
+              ).first.fill(
+                  str(task_id)
+              )
 
               rows.append(
                   (
                       "GET",
                       f"/tasks/{task_id}",
-                      run_request(block, 200)
+                      execute(get_block, 200)
                   )
               )
 
+              # -------------------------
               # PUT /tasks/{task_id}
-              block = operation(
+              # -------------------------
+              update_block = open_operation(
                   page,
-                  "put",
+                  "PUT",
                   "/tasks/{task_id}"
               )
 
-              block.locator(
+              update_block.locator(
                   ".parameters input"
-              ).first.fill(str(task_id))
+              ).first.fill(
+                  str(task_id)
+              )
 
-              block.locator("textarea").fill(
+              update_block.locator(
+                  "textarea"
+              ).fill(
                   json.dumps({
                       "title": "Swagger updated task",
                       "done": True
@@ -187,7 +267,7 @@ jobs:
                   (
                       "PUT",
                       f"/tasks/{task_id}",
-                      run_request(block, 200)
+                      execute(update_block, 200)
                   )
               )
 
@@ -195,63 +275,47 @@ jobs:
                   f"/tasks/{task_id}"
               )
 
-              if (
-                  updated["title"] != "Swagger updated task"
-                  or updated["done"] is not True
-              ):
+              if updated != {
+                  "id": task_id,
+                  "title": "Swagger updated task",
+                  "done": True
+              }:
                   raise RuntimeError(
-                      "Swagger PUT did not persist expected state: "
+                      "Swagger PUT returned unexpected task: "
                       f"{updated!r}"
                   )
 
+              # -------------------------
               # DELETE /tasks/{task_id}
-              block = operation(
+              # -------------------------
+              delete_block = open_operation(
                   page,
-                  "delete",
+                  "DELETE",
                   "/tasks/{task_id}"
               )
 
-              block.locator(
+              delete_block.locator(
                   ".parameters input"
-              ).first.fill(str(task_id))
+              ).first.fill(
+                  str(task_id)
+              )
 
               rows.append(
                   (
                       "DELETE",
                       f"/tasks/{task_id}",
-                      run_request(block, 204)
+                      execute(delete_block, 204)
                   )
               )
 
-              # GET /tasks again after deletion
-              block = page.locator(
-                  'xpath=//div['
-                  'contains(concat(" ", normalize-space(@class), " "), '
-                  '" opblock-get ")]'
-                  '[.//span['
-                  'contains(@class,"opblock-summary-path") '
-                  'and normalize-space(text())="/tasks"]]'
-              ).first
-
-              block.get_by_role(
-                  "button",
-                  name="Execute"
-              ).click()
-
-              expect(
-                  block.locator(
-                      ".live-responses-table .response-col_status"
-                  ).first
-              ).to_have_text(
-                  "200",
-                  timeout=15000
-              )
-
+              # -------------------------
+              # GET /tasks again
+              # -------------------------
               rows.append(
                   (
                       "GET",
-                      "/tasks (after delete)",
-                      200
+                      "/tasks after delete",
+                      execute(list_block, 200)
                   )
               )
 
@@ -262,15 +326,17 @@ jobs:
                   for task in remaining
               ):
                   raise RuntimeError(
-                      "Deleted task still exists after Swagger DELETE"
+                      "Deleted task still exists"
                   )
 
+              # Capture actual Swagger UI evidence
               page.screenshot(
                   path="docs/swagger-ui.png",
                   full_page=True
               )
 
               browser.close()
+
 
           timestamp = datetime.now(
               timezone.utc
@@ -284,12 +350,14 @@ jobs:
               file.write(
                   "Swagger UI full CRUD verification\n"
               )
+
               file.write(
-                  f"UTC: {timestamp}\n"
+                  f"UTC: {timestamp}\n\n"
               )
+
               file.write(
-                  "All requests below were executed through "
-                  "Swagger UI Try it out / Execute.\n\n"
+                  "Requests executed through Swagger UI "
+                  "Try it out / Execute:\n\n"
               )
 
               for method, path, status in rows:
@@ -308,38 +376,50 @@ jobs:
           # Assignment 1 submission status
 
           Verified in the final public repository:
-          - FastAPI server command on localhost:8000
-          - exact GET / and GET /health payloads
-          - three in-memory starter tasks using id/title/done
-          - full CRUD routes
-          - 200/201/204/400/404 behavior
+
+          - FastAPI server on localhost:8000
+          - exact GET / response
+          - exact GET /health response
+          - three starter tasks using id/title/done
+          - full in-memory CRUD
+          - 200 read responses
+          - 201 create response
+          - 204 delete response
+          - 400 invalid-request responses
+          - 404 unknown-task responses
           - JSON error responses
-          - missing/empty POST title rejection
-          - empty/invalid PUT rejection
-          - route summaries/descriptions in OpenAPI
+          - POST title validation
+          - PUT title/body validation
+          - Swagger/OpenAPI endpoint descriptions
           - automated test suite
           - real curl -i lifecycle evidence
-          - full CRUD cycle exercised through Swagger UI Try it out / Execute
-          - real Swagger UI screenshot at docs/swagger-ui.png
+          - full CRUD cycle executed through Swagger UI
+          - Swagger screenshot at docs/swagger-ui.png
           - Swagger CRUD evidence at docs/swagger-cycle.txt
-          - honest Stage 0 through Stage 6 commit history
+          - Stage 0 through Stage 6 Git history
           - public GitHub repository
 
           Remaining manual step:
-          - Submit this public repository URL through the FlyRank submission interface if required.
+
+          - Submit the public repository URL through the FlyRank submission interface.
           EOF
 
       - name: Commit generated evidence
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add \
             docs/swagger-ui.png \
             docs/swagger-cycle.txt \
             SUBMISSION_STATUS.md
 
-          git commit \
-            -m "Evidence: verify full CRUD through Swagger UI"
+          if git diff --cached --quiet; then
+            echo "No evidence changes to commit"
+          else
+            git commit \
+              -m "Evidence: verify full CRUD through Swagger UI"
 
-          git push       
+            git push
+  
