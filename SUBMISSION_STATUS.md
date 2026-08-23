@@ -14,8 +14,9 @@ Verified in this independent fallback repository:
 - real curl -i lifecycle evidence
 - honest Stage 0 through Stage 6 commit history
 
+Swagger evidence completed:
+- Real Swagger UI screenshot: `docs/swagger-ui.png`.
+- Full UI-driven CRUD record: `docs/swagger-cycle.txt`.
+
 Still external/manual before final submission:
-1. Capture a real Swagger UI screenshot and replace/fulfil README image reference at docs/swagger-ui.png.
-2. Exercise the final CRUD cycle in Swagger UI and retain that evidence.
-3. Create/publish the public GitHub repository and push this exact Git history.
-4. Submit the public repository through the FlyRank submission interface if required.
+1. Submit the public repository through the FlyRank submission interface if required.
