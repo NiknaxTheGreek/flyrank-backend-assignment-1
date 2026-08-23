@@ -1,0 +1,92 @@
+### GET /
+HTTP/1.1 200 OK
+date: Sun, 23 Aug 2026 09:57:56 GMT
+server: uvicorn
+content-length: 58
+content-type: application/json
+
+{"name":"Task API","version":"1.0","endpoints":["/tasks"]}
+### GET /health
+HTTP/1.1 200 OK
+date: Sun, 23 Aug 2026 09:57:56 GMT
+server: uvicorn
+content-length: 15
+content-type: application/json
+
+{"status":"ok"}
+### GET /tasks/1
+HTTP/1.1 200 OK
+date: Sun, 23 Aug 2026 09:57:56 GMT
+server: uvicorn
+content-length: 45
+content-type: application/json
+
+{"id":1,"title":"Learn FastAPI","done":false}
+### GET /tasks/99
+HTTP/1.1 404 Not Found
+date: Sun, 23 Aug 2026 09:57:56 GMT
+server: uvicorn
+content-length: 29
+content-type: application/json
+
+{"error":"Task 99 not found"}
+### POST /tasks
+HTTP/1.1 201 Created
+date: Sun, 23 Aug 2026 09:57:56 GMT
+server: uvicorn
+content-length: 40
+content-type: application/json
+
+{"id":4,"title":"Buy milk","done":false}
+### PUT /tasks/4
+HTTP/1.1 200 OK
+date: Sun, 23 Aug 2026 09:57:56 GMT
+server: uvicorn
+content-length: 43
+content-type: application/json
+
+{"id":4,"title":"Buy oat milk","done":true}
+### PUT /tasks/4 empty body
+HTTP/1.1 400 Bad Request
+date: Sun, 23 Aug 2026 09:57:56 GMT
+server: uvicorn
+content-length: 55
+content-type: application/json
+
+{"error":"Request body must include title and/or done"}
+### DELETE /tasks/4
+HTTP/1.1 204 No Content
+date: Sun, 23 Aug 2026 09:57:56 GMT
+server: uvicorn
+
+
+### GET /tasks
+HTTP/1.1 200 OK
+date: Sun, 23 Aug 2026 09:57:56 GMT
+server: uvicorn
+content-length: 147
+content-type: application/json
+
+[{"id":1,"title":"Learn FastAPI","done":false},{"id":2,"title":"Build a CRUD API","done":false},{"id":3,"title":"Read the assignment","done":true}]
+### GET /docs
+HTTP/1.1 200 OK
+date: Sun, 23 Aug 2026 09:57:56 GMT
+server: uvicorn
+content-length: 1007
+content-type: text/html; charset=utf-8
+
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+    <link rel="shortcut icon" href="https://fastapi.tiangolo.com/img/favicon.png">
+    <title>Task API - Swagger UI</title>
+    </head>
+    <body>
+    <div id="swagger-ui">
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <!-- `SwaggerUIBundle` is now available on the page -->
+

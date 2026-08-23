@@ -30,7 +30,14 @@ Invalid request bodies return `400` with a JSON `error` message. Unknown task id
 ## Verified `curl -i` example
 
 ```text
-CURL_OUTPUT_PLACEHOLDER
+### GET /
+HTTP/1.1 200 OK
+date: Sun, 23 Aug 2026 09:57:56 GMT
+server: uvicorn
+content-length: 58
+content-type: application/json
+
+{"name":"Task API","version":"1.0","endpoints":["/tasks"]}
 ```
 
 ## Swagger UI
