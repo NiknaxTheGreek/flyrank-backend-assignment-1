@@ -1,0 +1,17 @@
+Swagger UI full CRUD verification
+
+Executed at: 2026-08-23T15:43:15.918574+00:00
+Swagger UI: http://127.0.0.1:18001/docs
+
+All requests below were executed through Swagger UI using Try it out / Execute:
+- GET /tasks: HTTP 200
+- POST /tasks: HTTP 201
+- GET /tasks/4: HTTP 200
+- PUT /tasks/4: HTTP 200
+- DELETE /tasks/4: HTTP 204
+- GET /tasks (after delete): HTTP 200
+
+Verification checks:
+- POST created exactly one task with done=false.
+- PUT returned the expected updated title and done=true state.
+- DELETE removed the created task before the final GET list check.
