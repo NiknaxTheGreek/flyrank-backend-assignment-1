@@ -12,6 +12,7 @@ permissions:
 jobs:
   verify-swagger:
     runs-on: ubuntu-latest
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -66,16 +67,24 @@ jobs:
               )
               block = page.locator(f"xpath={xpath}").first
               expect(block).to_be_visible()
+
               block.locator(".opblock-summary").click()
+
               try_button = block.get_by_role("button", name="Try it out")
               if try_button.count():
                   try_button.click()
+
               return block
 
           def run_request(block, expected_status):
               block.get_by_role("button", name="Execute").click()
-              live_status = block.locator(".live-responses-table .response-col_status").first
-              expect(live_status).to_have_text(str(expected_status), timeout=15000)
+              live_status = block.locator(
+                  ".live-responses-table .response-col_status"
+              ).first
+              expect(live_status).to_have_text(
+                  str(expected_status),
+                  timeout=15000
+              )
               return expected_status
 
           rows = []
@@ -83,69 +92,214 @@ jobs:
 
           with sync_playwright() as p:
               browser = p.chromium.launch(headless=True)
-              page = browser.new_page(viewport={"width": 1440, "height": 1800})
-              page.goto(BASE + "/docs", wait_until="networkidle")
-              expect(page.get_by_text("Task API", exact=True).first).to_be_visible()
 
-              # READ list
-              block = operation(page, "get", "/tasks")
-              rows.append(("GET", "/tasks", run_request(block, 200)))
+              page = browser.new_page(
+                  viewport={"width": 1440, "height": 1800}
+              )
 
-              # CREATE
-              block = operation(page, "post", "/tasks")
-              block.locator("textarea").fill(json.dumps({"title": unique_title}))
-              rows.append(("POST", "/tasks", run_request(block, 201)))
+              page.goto(
+                  BASE + "/docs",
+                  wait_until="networkidle"
+              )
 
-              created = [t for t in api_json("/tasks") if t["title"] == unique_title]
+              expect(
+                  page.get_by_text("Task API", exact=True).first
+              ).to_be_visible()
+
+              # GET /tasks
+              block = operation(
+                  page,
+                  "get",
+                  "/tasks"
+              )
+              rows.append(
+                  ("GET", "/tasks", run_request(block, 200))
+              )
+
+              # POST /tasks
+              block = operation(
+                  page,
+                  "post",
+                  "/tasks"
+              )
+
+              block.locator("textarea").fill(
+                  json.dumps({
+                      "title": unique_title
+                  })
+              )
+
+              rows.append(
+                  ("POST", "/tasks", run_request(block, 201))
+              )
+
+              created = [
+                  task
+                  for task in api_json("/tasks")
+                  if task["title"] == unique_title
+              ]
+
               if len(created) != 1:
-                  raise RuntimeError(f"Expected exactly one created Swagger task, got {created!r}")
+                  raise RuntimeError(
+                      f"Expected one created Swagger task, got {created!r}"
+                  )
+
               task_id = created[0]["id"]
 
-              # READ one
-              block = operation(page, "get", "/tasks/{id}")
-              block.locator(".parameters input").first.fill(str(task_id))
-              rows.append(("GET", f"/tasks/{task_id}", run_request(block, 200)))
+              # GET /tasks/{task_id}
+              block = operation(
+                  page,
+                  "get",
+                  "/tasks/{task_id}"
+              )
 
-              # UPDATE title + done
-              block = operation(page, "put", "/tasks/{id}")
-              block.locator(".parameters input").first.fill(str(task_id))
-              block.locator("textarea").fill(json.dumps({"title": "Swagger updated task", "done": True}))
-              rows.append(("PUT", f"/tasks/{task_id}", run_request(block, 200)))
+              block.locator(
+                  ".parameters input"
+              ).first.fill(str(task_id))
 
-              updated = api_json(f"/tasks/{task_id}")
-              if updated["title"] != "Swagger updated task" or updated["done"] is not True:
-                  raise RuntimeError(f"Swagger PUT did not persist expected in-memory state: {updated!r}")
+              rows.append(
+                  (
+                      "GET",
+                      f"/tasks/{task_id}",
+                      run_request(block, 200)
+                  )
+              )
 
-              # DELETE
-              block = operation(page, "delete", "/tasks/{id}")
-              block.locator(".parameters input").first.fill(str(task_id))
-              rows.append(("DELETE", f"/tasks/{task_id}", run_request(block, 204)))
+              # PUT /tasks/{task_id}
+              block = operation(
+                  page,
+                  "put",
+                  "/tasks/{task_id}"
+              )
 
-              # READ list again to prove deletion in the UI flow
+              block.locator(
+                  ".parameters input"
+              ).first.fill(str(task_id))
+
+              block.locator("textarea").fill(
+                  json.dumps({
+                      "title": "Swagger updated task",
+                      "done": True
+                  })
+              )
+
+              rows.append(
+                  (
+                      "PUT",
+                      f"/tasks/{task_id}",
+                      run_request(block, 200)
+                  )
+              )
+
+              updated = api_json(
+                  f"/tasks/{task_id}"
+              )
+
+              if (
+                  updated["title"] != "Swagger updated task"
+                  or updated["done"] is not True
+              ):
+                  raise RuntimeError(
+                      "Swagger PUT did not persist expected state: "
+                      f"{updated!r}"
+                  )
+
+              # DELETE /tasks/{task_id}
+              block = operation(
+                  page,
+                  "delete",
+                  "/tasks/{task_id}"
+              )
+
+              block.locator(
+                  ".parameters input"
+              ).first.fill(str(task_id))
+
+              rows.append(
+                  (
+                      "DELETE",
+                      f"/tasks/{task_id}",
+                      run_request(block, 204)
+                  )
+              )
+
+              # GET /tasks again after deletion
               block = page.locator(
-                  'xpath=//div[contains(concat(" ", normalize-space(@class), " "), " opblock-get ")]'
-                  '[.//span[contains(@class,"opblock-summary-path") and normalize-space(text())="/tasks"]]'
+                  'xpath=//div['
+                  'contains(concat(" ", normalize-space(@class), " "), '
+                  '" opblock-get ")]'
+                  '[.//span['
+                  'contains(@class,"opblock-summary-path") '
+                  'and normalize-space(text())="/tasks"]]'
               ).first
-              # Reuse the already-open GET block and execute again.
-              block.get_by_role("button", name="Execute").click()
-              expect(block.locator(".live-responses-table .response-col_status").first).to_have_text("200", timeout=15000)
-              rows.append(("GET", "/tasks (after delete)", 200))
+
+              block.get_by_role(
+                  "button",
+                  name="Execute"
+              ).click()
+
+              expect(
+                  block.locator(
+                      ".live-responses-table .response-col_status"
+                  ).first
+              ).to_have_text(
+                  "200",
+                  timeout=15000
+              )
+
+              rows.append(
+                  (
+                      "GET",
+                      "/tasks (after delete)",
+                      200
+                  )
+              )
 
               remaining = api_json("/tasks")
-              if any(t["id"] == task_id for t in remaining):
-                  raise RuntimeError("Deleted task still exists after Swagger DELETE")
 
-              page.screenshot(path="docs/swagger-ui.png", full_page=True)
+              if any(
+                  task["id"] == task_id
+                  for task in remaining
+              ):
+                  raise RuntimeError(
+                      "Deleted task still exists after Swagger DELETE"
+                  )
+
+              page.screenshot(
+                  path="docs/swagger-ui.png",
+                  full_page=True
+              )
+
               browser.close()
 
-          timestamp = datetime.now(timezone.utc).isoformat()
-          with open("docs/swagger-cycle.txt", "w", encoding="utf-8") as f:
-              f.write("Swagger UI full CRUD verification\n")
-              f.write(f"UTC: {timestamp}\n")
-              f.write("All requests below were executed through Swagger UI Try it out / Execute.\n\n")
+          timestamp = datetime.now(
+              timezone.utc
+          ).isoformat()
+
+          with open(
+              "docs/swagger-cycle.txt",
+              "w",
+              encoding="utf-8"
+          ) as file:
+              file.write(
+                  "Swagger UI full CRUD verification\n"
+              )
+              file.write(
+                  f"UTC: {timestamp}\n"
+              )
+              file.write(
+                  "All requests below were executed through "
+                  "Swagger UI Try it out / Execute.\n\n"
+              )
+
               for method, path, status in rows:
-                  f.write(f"{method} {path} -> {status}\n")
-              f.write("\nResult: PASS\n")
+                  file.write(
+                      f"{method} {path} -> {status}\n"
+                  )
+
+              file.write(
+                  "\nResult: PASS\n"
+              )
           PY
 
       - name: Update submission status
@@ -159,7 +313,7 @@ jobs:
           - three in-memory starter tasks using id/title/done
           - full CRUD routes
           - 200/201/204/400/404 behavior
-          - JSON `error` responses
+          - JSON error responses
           - missing/empty POST title rejection
           - empty/invalid PUT rejection
           - route summaries/descriptions in OpenAPI
@@ -179,6 +333,13 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/swagger-ui.png docs/swagger-cycle.txt SUBMISSION_STATUS.md
-          git commit -m "Evidence: verify full CRUD through Swagger UI"
-          git push
+
+          git add \
+            docs/swagger-ui.png \
+            docs/swagger-cycle.txt \
+            SUBMISSION_STATUS.md
+
+          git commit \
+            -m "Evidence: verify full CRUD through Swagger UI"
+
+          git push       
