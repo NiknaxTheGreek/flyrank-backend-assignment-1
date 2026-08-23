@@ -422,4 +422,5 @@ jobs:
               -m "Evidence: verify full CRUD through Swagger UI"
 
             git push
+          fi
   
