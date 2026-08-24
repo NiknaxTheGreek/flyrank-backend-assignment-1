@@ -1,4 +1,4 @@
-# W2 · A1 — Task CRUD API
+# FlyRank Backend Assignment 1 — CRUD API
 
 A small FastAPI server that manages an in-memory to-do list with full CRUD operations. Data intentionally lives only in memory for Assignment 1 and resets when the process restarts.
 
@@ -6,43 +6,50 @@ A small FastAPI server that manages an in-memory to-do list with full CRUD opera
 
 Requires Python 3.10+.
 
+From a clean clone:
+
 ```bash
+python -m venv .venv
 python -m pip install -r requirements.txt
-./run.sh
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-The API listens on `http://localhost:8000` and Swagger UI is at `http://localhost:8000/docs`.
+The API listens on `http://localhost:8000`; Swagger UI is at `http://localhost:8000/docs`.
 
-## Endpoints
+## API contract
 
-| Method | Path | Success | Purpose |
-|---|---|---:|---|
-| GET | `/` | 200 | API metadata |
-| GET | `/health` | 200 | Health check |
-| GET | `/tasks` | 200 | List all tasks |
-| GET | `/tasks/{id}` | 200 | Get one task |
-| POST | `/tasks` | 201 | Create a task |
-| PUT | `/tasks/{id}` | 200 | Update `title` and/or `done` |
-| DELETE | `/tasks/{id}` | 204 | Delete a task |
+| Method | Path | Success | Failure behavior | Purpose |
+|---|---|---:|---|---|
+| GET | `/` | 200 | — | Identify the API |
+| GET | `/health` | 200 | — | Return `{"status":"ok"}` |
+| GET | `/tasks` | 200 | — | List all tasks |
+| GET | `/tasks/{id}` | 200 | 404 unknown ID | Get one task |
+| POST | `/tasks` | 201 | 400 missing/blank/invalid title | Create a task; server assigns ID and `done:false` |
+| PUT | `/tasks/{id}` | 200 | 400 invalid body; 404 unknown ID | Update `title` and/or `done` |
+| DELETE | `/tasks/{id}` | 204 | 404 unknown ID | Delete a task with an empty response body |
 
-Invalid request bodies return `400` with a JSON `error` message. Unknown task ids return `404` with a JSON `error` message.
+The process starts with exactly three in-memory tasks using the `id`, `title`, and `done` fields.
 
-## Verified `curl -i` example
+## Verification evidence
+
+The final repository contains executed evidence rather than sample-only commands:
+
+- [`docs/curl-cycle.txt`](docs/curl-cycle.txt) — recorded `curl -i` CRUD lifecycle output.
+- [`docs/swagger-cycle.txt`](docs/swagger-cycle.txt) — full CRUD executed through Swagger UI `Try it out` / `Execute` with `Result: PASS`.
+- [`docs/swagger-ui.png`](docs/swagger-ui.png) — Swagger UI screenshot from that verification run.
+- [`docs/test-results.txt`](docs/test-results.txt) — recorded automated-test result.
+- [`.github/workflows/a1-submission-gate.yml`](.github/workflows/a1-submission-gate.yml) — clean-checkout acceptance gate that reinstalls dependencies, runs the contract tests, starts the real server, performs a complete curl lifecycle, and verifies the Swagger evidence.
+
+Example from the recorded curl evidence:
 
 ```text
-### GET /
-HTTP/1.1 200 OK
-date: Sun, 23 Aug 2026 09:57:56 GMT
-server: uvicorn
-content-length: 58
-content-type: application/json
-
-{"name":"Task API","version":"1.0","endpoints":["/tasks"]}
+POST /tasks -> 201
+PUT /tasks/{id} -> 200
+DELETE /tasks/{id} -> 204
+GET deleted task -> 404
 ```
 
 ## Swagger UI
-
-The full CRUD cycle was exercised against the final API contract through Swagger UI.
 
 ![Swagger UI showing the Task API endpoints](docs/swagger-ui.png)
 
@@ -52,8 +59,12 @@ The full CRUD cycle was exercised against the final API contract through Swagger
 pytest -q
 ```
 
-The automated suite verifies the exact root/health payloads, in-memory `done` schema, CRUD status codes, JSON error shape, empty PUT rejection, empty 204 response body, and Swagger/OpenAPI descriptions.
+The automated suite checks the exact root/health payloads, the three-task in-memory schema, CRUD success codes, `400` validation, `404` JSON errors, partial updates, empty `204` delete responses, and generated Swagger/OpenAPI descriptions.
 
-## In-memory behavior
+## Git history
 
-Because Assignment 1 deliberately uses in-memory storage, any tasks created while the server is running disappear when the process restarts. Assignment 2 introduces persistent database storage to solve that limitation.
+The repository contains the Assignment 1 stage commits, including Stage 2 read endpoints, Stage 3 create/validation, Stage 4 full CRUD, Stage 5 Swagger UI, and Stage 6 publish/docs, plus later evidence-only and audit fixes. These existing commits are preserved; the final audit does not rewrite history.
+
+## In-memory limitation
+
+Because Assignment 1 deliberately uses in-memory storage, tasks created while the server is running disappear when the process restarts. Assignment 2 introduces persistent database storage to solve that limitation.
