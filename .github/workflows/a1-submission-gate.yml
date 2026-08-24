@@ -44,7 +44,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          trap 'kill $(cat /tmp/a1-api.pid) 2>/dev/null || true' EXIT
 
           test "$(curl -sS -o /tmp/root.json -w '%{http_code}' http://127.0.0.1:8000/)" = "200"
           test "$(curl -sS -o /tmp/health.json -w '%{http_code}' http://127.0.0.1:8000/health)" = "200"
@@ -82,4 +81,5 @@ jobs:
           grep -q 'Result: PASS' docs/swagger-cycle.txt
           test -s docs/curl-cycle.txt
           curl -fsS http://127.0.0.1:8000/docs >/dev/null
+          kill $(cat /tmp/a1-api.pid) 2>/dev/null || true
           echo 'A1_SWAGGER_EVIDENCE_GATE=PASS'
