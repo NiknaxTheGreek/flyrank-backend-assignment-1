@@ -1,0 +1,85 @@
+name: Assignment 1 Submission Gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [final/a1-submission-audit]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Clean-install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run contract tests
+        run: PYTHONPATH=. python -m pytest -q
+
+      - name: Start API from clean checkout
+        run: |
+          python -m uvicorn main:app --host 127.0.0.1 --port 8000 > /tmp/a1-api.log 2>&1 &
+          echo $! > /tmp/a1-api.pid
+          for i in {1..50}; do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null; then exit 0; fi
+            sleep 0.1
+          done
+          cat /tmp/a1-api.log
+          exit 1
+
+      - name: Prove full curl CRUD lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'kill $(cat /tmp/a1-api.pid) 2>/dev/null || true' EXIT
+
+          test "$(curl -sS -o /tmp/root.json -w '%{http_code}' http://127.0.0.1:8000/)" = "200"
+          test "$(curl -sS -o /tmp/health.json -w '%{http_code}' http://127.0.0.1:8000/health)" = "200"
+          test "$(curl -sS -o /tmp/list.json -w '%{http_code}' http://127.0.0.1:8000/tasks)" = "200"
+
+          CREATE_CODE=$(curl -sS -o /tmp/create.json -w '%{http_code}' \
+            -H 'Content-Type: application/json' \
+            -d '{"title":"Submission gate task"}' \
+            http://127.0.0.1:8000/tasks)
+          test "$CREATE_CODE" = "201"
+          TASK_ID=$(python -c "import json; d=json.load(open('/tmp/create.json')); assert d['done'] is False; print(d['id'])")
+
+          test "$(curl -sS -o /tmp/get.json -w '%{http_code}' http://127.0.0.1:8000/tasks/$TASK_ID)" = "200"
+
+          UPDATE_CODE=$(curl -sS -o /tmp/update.json -w '%{http_code}' \
+            -X PUT -H 'Content-Type: application/json' \
+            -d '{"title":"Submission gate updated","done":true}' \
+            http://127.0.0.1:8000/tasks/$TASK_ID)
+          test "$UPDATE_CODE" = "200"
+          python -c "import json; d=json.load(open('/tmp/update.json')); assert d['title']=='Submission gate updated' and d['done'] is True"
+
+          test "$(curl -sS -o /tmp/invalid.json -w '%{http_code}' -H 'Content-Type: application/json' -d '{"title":""}' http://127.0.0.1:8000/tasks)" = "400"
+          test "$(curl -sS -o /tmp/missing.json -w '%{http_code}' http://127.0.0.1:8000/tasks/99999)" = "404"
+
+          DELETE_CODE=$(curl -sS -o /tmp/delete.body -w '%{http_code}' -X DELETE http://127.0.0.1:8000/tasks/$TASK_ID)
+          test "$DELETE_CODE" = "204"
+          test ! -s /tmp/delete.body
+          test "$(curl -sS -o /tmp/deleted.json -w '%{http_code}' http://127.0.0.1:8000/tasks/$TASK_ID)" = "404"
+
+          echo 'A1_CURL_CRUD_GATE=PASS'
+
+      - name: Verify Swagger evidence is present
+        run: |
+          test -s docs/swagger-ui.png
+          grep -q 'Result: PASS' docs/swagger-cycle.txt
+          test -s docs/curl-cycle.txt
+          curl -fsS http://127.0.0.1:8000/docs >/dev/null
+          echo 'A1_SWAGGER_EVIDENCE_GATE=PASS'
