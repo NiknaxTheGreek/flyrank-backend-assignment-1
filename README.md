@@ -35,7 +35,7 @@ The process starts with exactly three in-memory tasks using the `id`, `title`, a
 The final repository contains executed evidence rather than sample-only commands:
 
 - [`docs/curl-cycle.txt`](docs/curl-cycle.txt) — recorded `curl -i` CRUD lifecycle output.
-- [`docs/swagger-cycle.txt`](docs/swagger-cycle.txt) — full CRUD executed through Swagger UI `Try it out` / `Execute` with `Result: PASS`.
+- [`docs/swagger-cycle.txt`](docs/swagger-cycle.txt) — records the full CRUD sequence executed through Swagger UI `Try it out` / `Execute`, including the observed `200`, `201`, and `204` responses and post-operation checks.
 - [`docs/swagger-ui.png`](docs/swagger-ui.png) — Swagger UI screenshot from that verification run.
 - [`docs/test-results.txt`](docs/test-results.txt) — recorded automated-test result.
 - [`.github/workflows/a1-submission-gate.yml`](.github/workflows/a1-submission-gate.yml) — clean-checkout acceptance gate that reinstalls dependencies, runs the contract tests, starts the real server, performs a complete curl lifecycle, and verifies the Swagger evidence.
